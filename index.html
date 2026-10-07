@@ -1,34 +1,114 @@
-function doPost(e) {
-  try {
-    var data = JSON.parse(e.postData.contents);
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pengumpulan Lembar Jawaban LKPD</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #eef2f5; margin: 0; padding: 20px; color: #333; }
+    .container { max-width: 480px; background: white; margin: 0 auto; padding: 25px; border-radius: 12px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); }
+    h2 { text-align: center; color: #2c3e50; margin-top: 0; margin-bottom: 5px; }
+    p.desc { text-align: center; color: #666; font-size: 14px; margin-bottom: 25px; }
+    .form-group { margin-bottom: 20px; }
+    label { font-weight: bold; display: block; margin-bottom: 8px; font-size: 14px; }
+    input[type="text"], input[type="file"] { width: 100%; padding: 12px; border: 1px solid #ccc; border-radius: 6px; box-sizing: border-box; font-size: 15px; }
+    button { width: 100%; background: #007bff; color: white; border: none; padding: 14px; font-size: 16px; border-radius: 6px; cursor: pointer; font-weight: bold; margin-top: 10px; transition: background 0.2s; }
+    button:hover { background: #0056b3; }
+    button:disabled { background: #a0a0a0; cursor: not-allowed; }
+    #status { margin-top: 20px; text-align: center; font-weight: bold; font-size: 16px; min-height: 24px; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Pengumpulan Lembar Jawaban</h2>
+  <p class="desc">Ambil foto langsung dari kamera atau pilih dari galeri HP.</p>
+
+  <form id="uploadForm">
+    <div class="form-group">
+      <label for="namaSiswa">Nama Lengkap Siswa:</label>
+      <input type="text" id="namaSiswa" placeholder="Masukkan nama lengkap..." required>
+    </div>
+
+    <div class="form-group">
+      <label for="kelas">Kelas:</label>
+      <input type="text" id="kelas" placeholder="Contoh: 5A" required>
+    </div>
+
+    <div class="form-group">
+      <label for="fotoLKPD">Foto Lembar Jawaban:</label>
+      <input type="file" id="fotoLKPD" accept="image/*" required>
+    </div>
+
+    <button type="submit" id="btnSubmit">KIRIM JAWABAN</button>
+  </form>
+
+  <div id="status"></div>
+</div>
+
+<script>
+  // URL Web App Apps Script milik Ibu
+  const scriptURL = "https://script.google.com/macros/s/AKfycbxO4ahYqxfR5mX9ZMUrPpyZmjEYaW3AEI7MRkScvh38mJ2hHolL2bUSZ5HyNVYL2Q3b/exec";
+
+  document.getElementById('uploadForm').addEventListener('submit', function(e) {
+    e.preventDefault();
     
-    // ID Folder Google Drive Ibu
-    var folderId = "1zULZtPK-AfSxjvzMOtiyfAp2DQRWOFLV"; 
-    var folder = DriveApp.getFolderById(folderId);
-    
-    // Simpan Foto Lembar Jawaban ke Google Drive
-    var contentType = data.fileType || "image/jpeg";
-    var decodedFile = Utilities.base64Decode(data.fileBase64);
-    var blob = Utilities.newBlob(decodedFile, contentType, data.namaSiswa + " - " + data.kelas + " - " + data.namaTugas + ".jpg");
-    var file = folder.createFile(blob);
-    file.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-    var fileUrl = file.getUrl();
+    const btn = document.getElementById('btnSubmit');
+    const statusDiv = document.getElementById('status');
+    const fileInput = document.getElementById('fotoLKPD').files[0];
 
-    // Catat ke Google Sheets
-    var sheet = SpreadsheetApp.getActiveSpreadsheet().getActiveSheet();
-    sheet.appendRow([
-      new Date(),
-      data.namaSiswa,
-      data.kelas,
-      data.namaTugas,
-      fileUrl // Link foto di Google Drive
-    ]);
+    if (!fileInput) {
+      statusDiv.style.color = "#dc3545";
+      statusDiv.innerText = "Silakan pilih foto terlebih dahulu.";
+      return;
+    }
 
-    return ContentService.createTextOutput(JSON.stringify({"result": "success"}))
-      .setMimeType(ContentService.MimeType.JSON);
+    btn.disabled = true;
+    statusDiv.style.color = "#007bff";
+    statusDiv.innerText = "Mengirim jawaban...";
 
-  } catch (err) {
-    return ContentService.createTextOutput(JSON.stringify({"result": "error", "error": err.toString()}))
-      .setMimeType(ContentService.MimeType.JSON);
-  }
-}
+    const reader = new FileReader();
+    reader.onload = function() {
+      const base64Data = reader.result.split(',')[1];
+      
+      const payload = {
+        namaSiswa: document.getElementById('namaSiswa').value,
+        kelas: document.getElementById('kelas').value,
+        namaTugas: "LKPD Bahasa Indonesia",
+        fileBase64: base64Data,
+        fileType: fileInput.type
+      };
+
+      fetch(scriptURL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8'
+        },
+        body: JSON.stringify(payload)
+      })
+      .then(res => res.json())
+      .then(data => {
+        if(data.result === "success") {
+          statusDiv.style.color = "#28a745";
+          statusDiv.innerText = "Berhasil Mengirim Jawaban";
+          document.getElementById('uploadForm').reset();
+        } else {
+          throw new Error(data.error || "Gagal menyimpan");
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        statusDiv.style.color = "#dc3545";
+        statusDiv.innerText = "Gagal mengirim Jawaban";
+      })
+      .finally(() => {
+        btn.disabled = false;
+      });
+    };
+
+    reader.readAsDataURL(fileInput);
+  });
+</script>
+
+</body>
+</html>
